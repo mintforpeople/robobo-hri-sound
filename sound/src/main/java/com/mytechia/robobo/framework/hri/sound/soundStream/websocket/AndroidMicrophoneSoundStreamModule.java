@@ -103,7 +103,8 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
                 if (c.getParameters().containsKey("sampleRate")) {
                     try{
                         stopRecording();
-                        setSampleRate(Integer.parseInt(c.getParameters().get("sampleRate")));
+                        int newSampleRate = Integer.parseInt(c.getParameters().get("sampleRate"));
+                        setSampleRate(newSampleRate);
                         startRecording();
                     } catch (Exception e){
                         Log.e(TAG, e.getMessage());
@@ -122,7 +123,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        server = new UDPServer(buffersize);
+        server = new UDPServer(buffersize, TAG);
         server.start();
     }
 
@@ -143,7 +144,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
 
     @SuppressLint("MissingPermission")
     protected void startRecording(){
-
+        Log.d(TAG, "Started recording mic audio for streaming");
         buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
 
         if (buffersize == AudioRecord.ERROR_BAD_VALUE) {
@@ -199,6 +200,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     }
 
     protected void stopRecording() throws InterruptedException {
+        Log.d(TAG, "Stopped recording mic audio for streaming");
         isRecording = false;
         audioRecord.stop();
         audioThread.join();
@@ -206,22 +208,23 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
 
     @Override
     public void setSampleRate(int sampleRate){
+        Log.d(TAG, String.format("Changing sampleRate from %d to %d", this.sampleRate, sampleRate));
         if (!isRecording){
             switch (sampleRate){
                 case LOW_SAMPLE_RATE:
-                    sampleRate = LOW_SAMPLE_RATE;
+                    this.sampleRate = LOW_SAMPLE_RATE;
                     break;
                 case DEFAULT_SAMPLE_RATE:
-                    sampleRate = DEFAULT_SAMPLE_RATE;
+                    this.sampleRate = DEFAULT_SAMPLE_RATE;
                     break;
                 case HIGH_SAMPLE_RATE:
-                    sampleRate = HIGH_SAMPLE_RATE;
+                    this.sampleRate = HIGH_SAMPLE_RATE;
                     break;
                 case HIGHEST_SAMPLE_RATE:
-                    sampleRate = HIGHEST_SAMPLE_RATE;
+                    this.sampleRate = HIGHEST_SAMPLE_RATE;
                     break;
                 case EXTREME_SAMPLE_RATE:
-                    sampleRate = EXTREME_SAMPLE_RATE;
+                    this.sampleRate = EXTREME_SAMPLE_RATE;
                     break;
                 default:
                     break;
@@ -230,6 +233,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     }
 
     public void setSyncId(int id) {
+        Log.d(TAG, "Syncing audio stream");
         sync_id = id;
     }
 }

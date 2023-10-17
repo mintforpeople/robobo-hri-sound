@@ -1,5 +1,7 @@
 package com.mytechia.robobo.framework.hri.sound.soundStream.websocket;
 
+import android.util.Log;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -22,14 +24,17 @@ public class UDPServer extends Thread {
 
     private static final int PORT = 40406;
     private int bufferSize;
+    private String tag;
 
-    public UDPServer(int bufferSize) {
+    public UDPServer(int bufferSize, String tag) {
         this.bufferSize = bufferSize;
+        this.tag = tag;
     }
 
     @Override
     public void run(){
         try {
+            Log.d(tag, String.format("Audio stream server listening on %s:%d", getIPAddress(true), PORT));
             socket = new DatagramSocket(PORT);
             Thread senderThread = new Thread(this::sendDataToClients);
             senderThread.start();
@@ -91,6 +96,7 @@ public class UDPServer extends Thread {
     private void processMessage(String message, String clientKey, InetAddress clientAddress) {
         if ("CONNECT-AUDIO".equals(message)) {
             if (!connectedClients.containsKey(clientKey)) {
+                Log.d(tag, String.format("New client connected %s", clientAddress));
                 connectedClients.put(clientKey, clientAddress);
                 lastClientActivity.put(clientKey, System.currentTimeMillis());
             }
@@ -99,6 +105,7 @@ public class UDPServer extends Thread {
             lastClientActivity.put(clientKey, System.currentTimeMillis());
         }
         if ("DISCONNECT-AUDIO".equals(message)) {
+            Log.d(tag, String.format("Client disconnected from %s", clientAddress));
             if (connectedClients.containsKey(clientKey)) {
                 connectedClients.remove(clientKey);
                 lastClientActivity.remove(clientKey);
@@ -112,8 +119,10 @@ public class UDPServer extends Thread {
             for (Map.Entry<String, Long> entry : lastClientActivity.entrySet()) {
                 if (currentTime - entry.getValue() > CLIENT_TIMEOUT) {
                     String clientKey = entry.getKey();
+                    String clientAddress = connectedClients.get(clientKey).getHostAddress();
                     connectedClients.remove(clientKey);
                     lastClientActivity.remove(clientKey);
+                    Log.d(tag, String.format("Client disconnected due to inactivity from %s", clientAddress));
                 }
             }
             // Espera antes de volver a verificar la inactividad de los clientes
