@@ -8,6 +8,7 @@ import android.media.MediaRecorder;
 import android.util.Log;
 
 import com.mytechia.commons.framework.exception.InternalErrorException;
+import com.mytechia.robobo.framework.LogLvl;
 import com.mytechia.robobo.framework.RoboboManager;
 import com.mytechia.robobo.framework.exception.ModuleNotFoundException;
 import com.mytechia.robobo.framework.hri.sound.soundStream.ASoundStreamModule;
@@ -123,28 +124,34 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        server = new UDPServer(buffersize, TAG);
+        server = new UDPServer(buffersize, TAG, m);
         server.start();
     }
 
     @Override
     public void shutdown() throws InternalErrorException {
+        try{
+            server.stopServerRunning();
+            server.join();
+        } catch (InterruptedException e){
+            m.logError(TAG, e.getMessage(), e);
+        }
 
     }
 
     @Override
     public String getModuleInfo() {
-        return null;
+        return "Sound Stream Module";
     }
 
     @Override
     public String getModuleVersion() {
-        return null;
+        return "v0.1";
     }
 
     @SuppressLint("MissingPermission")
     protected void startRecording(){
-        Log.d(TAG, "Started recording mic audio for streaming");
+        m.log(LogLvl.DEBUG, TAG, "Started recording mic audio for streaming");
         buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
 
         if (buffersize == AudioRecord.ERROR_BAD_VALUE) {
@@ -186,7 +193,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
                             output.write(metadataBytes);
 
                         } catch (IOException e) {
-                            e.printStackTrace();
+                            m.logError(TAG, e.getMessage(), e);
                         }
 
                         byte[] out = output.toByteArray();
@@ -200,7 +207,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     }
 
     protected void stopRecording() throws InterruptedException {
-        Log.d(TAG, "Stopped recording mic audio for streaming");
+        m.log(LogLvl.DEBUG, TAG,"Stopped recording mic audio for streaming");
         isRecording = false;
         audioRecord.stop();
         audioThread.join();
@@ -208,7 +215,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
 
     @Override
     public void setSampleRate(int sampleRate){
-        Log.d(TAG, String.format("Changing sampleRate from %d to %d", this.sampleRate, sampleRate));
+        m.log(LogLvl.DEBUG, TAG,String.format("Changing sampleRate from %d to %d", this.sampleRate, sampleRate));
         if (!isRecording){
             switch (sampleRate){
                 case LOW_SAMPLE_RATE:
@@ -233,7 +240,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     }
 
     public void setSyncId(int id) {
-        Log.d(TAG, "Syncing audio stream");
+        m.log(LogLvl.DEBUG, TAG,"Syncing audio stream");
         sync_id = id;
     }
 }

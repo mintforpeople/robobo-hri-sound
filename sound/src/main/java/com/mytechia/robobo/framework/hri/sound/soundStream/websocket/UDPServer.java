@@ -1,6 +1,10 @@
 package com.mytechia.robobo.framework.hri.sound.soundStream.websocket;
 
+import android.nfc.Tag;
 import android.util.Log;
+
+import com.mytechia.robobo.framework.LogLvl;
+import com.mytechia.robobo.framework.RoboboManager;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -26,26 +30,51 @@ public class UDPServer extends Thread {
     private int bufferSize;
     private String tag;
 
-    public UDPServer(int bufferSize, String tag) {
+    private RoboboManager manager;
+
+    private boolean isServerRunning;
+
+    Thread senderThread;
+    Thread receiverThread;
+    Thread cleanupThread;
+
+    public UDPServer(int bufferSize, String tag, RoboboManager m) {
         this.bufferSize = bufferSize;
         this.tag = tag;
+        this.manager = m;
+    }
+
+    public void stopServerRunning(){
+        isServerRunning = false;
+
+        try{
+            senderThread.join();
+            receiverThread.join();
+            cleanupThread.join();
+        } catch (InterruptedException e){
+            manager.logError(tag, e.getMessage(), e);
+        }
+
     }
 
     @Override
     public void run(){
         try {
-            Log.d(tag, String.format("Audio stream server listening on %s:%d", getIPAddress(true), PORT));
+            manager.log(LogLvl.DEBUG, tag, String.format("Audio stream server listening on %s:%d", getIPAddress(true), PORT));
             socket = new DatagramSocket(PORT);
-            Thread senderThread = new Thread(this::sendDataToClients);
+
+            isServerRunning = true;
+
+            senderThread = new Thread(this::sendDataToClients);
             senderThread.start();
 
-            Thread receiverThread = new Thread(this::receiveDataFromClients);
+            receiverThread = new Thread(this::receiveDataFromClients);
             receiverThread.start();
 
-            Thread cleanupThread = new Thread(this::cleanupInactiveClients);
+            cleanupThread = new Thread(this::cleanupInactiveClients);
             cleanupThread.start();
         } catch (Exception e) {
-            e.printStackTrace();
+            manager.logError(tag, e.getMessage(), e);
         }
     }
 
@@ -53,12 +82,12 @@ public class UDPServer extends Thread {
         try {
             packetQueue.put(data);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            manager.logError(tag, e.getMessage(), e);
         }
     }
 
     private void sendDataToClients() {
-        while (true) {
+        while (isServerRunning) {
             try {
                 byte[] data = packetQueue.take();
                 for (InetAddress clientAddress : connectedClients.values()) {
@@ -66,14 +95,14 @@ public class UDPServer extends Thread {
                     socket.send(packet);
                 }
             } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
+                manager.logError(tag, e.getMessage(), e);
             }
         }
     }
 
     private void receiveDataFromClients() {
         byte[] receiveData = new byte[bufferSize];
-        while (true) {
+        while (isServerRunning) {
             try {
                 DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 socket.receive(receivePacket);
@@ -88,7 +117,7 @@ public class UDPServer extends Thread {
                 processMessage(message, clientKey, clientAddress);
 
             } catch (IOException e) {
-                e.printStackTrace();
+                manager.logError(tag, e.getMessage(), e);
             }
         }
     }
@@ -96,7 +125,7 @@ public class UDPServer extends Thread {
     private void processMessage(String message, String clientKey, InetAddress clientAddress) {
         if ("CONNECT-AUDIO".equals(message)) {
             if (!connectedClients.containsKey(clientKey)) {
-                Log.d(tag, String.format("New client connected %s", clientAddress));
+                manager.log(LogLvl.DEBUG, tag, String.format("New client connected %s", clientAddress));
                 connectedClients.put(clientKey, clientAddress);
                 lastClientActivity.put(clientKey, System.currentTimeMillis());
             }
@@ -105,7 +134,7 @@ public class UDPServer extends Thread {
             lastClientActivity.put(clientKey, System.currentTimeMillis());
         }
         if ("DISCONNECT-AUDIO".equals(message)) {
-            Log.d(tag, String.format("Client disconnected from %s", clientAddress));
+            manager.log(LogLvl.DEBUG, tag, String.format("Client disconnected from %s", clientAddress));
             if (connectedClients.containsKey(clientKey)) {
                 connectedClients.remove(clientKey);
                 lastClientActivity.remove(clientKey);
@@ -114,7 +143,7 @@ public class UDPServer extends Thread {
     }
 
     private void cleanupInactiveClients() {
-        while (true) {
+        while (isServerRunning) {
             long currentTime = System.currentTimeMillis();
             for (Map.Entry<String, Long> entry : lastClientActivity.entrySet()) {
                 if (currentTime - entry.getValue() > CLIENT_TIMEOUT) {
@@ -122,14 +151,14 @@ public class UDPServer extends Thread {
                     String clientAddress = connectedClients.get(clientKey).getHostAddress();
                     connectedClients.remove(clientKey);
                     lastClientActivity.remove(clientKey);
-                    Log.d(tag, String.format("Client disconnected due to inactivity from %s", clientAddress));
+                    manager.log(LogLvl.DEBUG, tag, String.format("Client disconnected due to inactivity from %s", clientAddress));
                 }
             }
             // Espera antes de volver a verificar la inactividad de los clientes
             try {
                 Thread.sleep(1000); // Comprueba cada 10 segundos (ajusta según tus necesidades)
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                manager.logError(tag, e.getMessage(), e);
             }
         }
     }
