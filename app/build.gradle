@@ -24,7 +24,7 @@ android {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    androidTestImplementation('androidx.test.espresso:espresso-core:3.1.0', {
+    implementation('androidx.test.espresso:espresso-core:3.1.0', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
     implementation project(':sound')
@@ -32,4 +32,9 @@ dependencies {
     implementation 'com.mytechia:robobo-remote-control-ws:1.0.2.1'
 
     testImplementation 'junit:junit:4.13.2'
+
+    testImplementation "com.android.support.test:rules:1.0.2"
+    testImplementation ("com.android.support.test.espresso:espresso-core:3.1.0", {
+        exclude group: 'com.android.support'
+    })
 }

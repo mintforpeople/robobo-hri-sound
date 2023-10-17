@@ -1,5 +1,7 @@
 package com.mytechia.robobo.framework.hri.sound.soundStream.websocket;
 
+import android.annotation.SuppressLint;
+import android.content.res.AssetManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
@@ -7,6 +9,7 @@ import android.util.Log;
 
 import com.mytechia.commons.framework.exception.InternalErrorException;
 import com.mytechia.robobo.framework.RoboboManager;
+import com.mytechia.robobo.framework.exception.ModuleNotFoundException;
 import com.mytechia.robobo.framework.hri.sound.soundStream.ASoundStreamModule;
 import com.mytechia.robobo.framework.remote_control.remotemodule.Command;
 import com.mytechia.robobo.framework.remote_control.remotemodule.ICommandExecutor;
@@ -14,15 +17,15 @@ import com.mytechia.robobo.framework.remote_control.remotemodule.IRemoteControlM
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.Properties;
 
 public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     private static final String TAG = "AndMicSoundStreamModule";
     static final int QUEUE_LENGTH = 60;
 
-    IRemoteControlModule rcmodule;
-
-    private static final int LOW_SAMPLE_RATE = 22050; // Frecuencia de muestreo en Hz
+    private static final int LOW_SAMPLE_RATE = 11025; // Frecuencia de muestreo en Hz
     private static final int DEFAULT_SAMPLE_RATE = 44100; // Frecuencia de muestreo en Hz
     private static final int HIGH_SAMPLE_RATE = 48000; // Frecuencia de muestreo en Hz
     private static final int HIGHEST_SAMPLE_RATE = 96000; // Frecuencia de muestreo en Hz
@@ -37,7 +40,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
 
     public UDPServer server;
 
-    private int BUFFER_SIZE = 4096;
+    private int buffersize = 4096;
 
     private int sync_id = -1;
 
@@ -55,14 +58,35 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
         channelConfig = DEFAULT_CHANNEL_CONFIG;
         audioFormat = DEFAULT_AUDIO_FORMAT;
 
-        rcmodule.registerCommand("START-AUDIOSTREAM", new ICommandExecutor() {
+        // Get instances pf teh remote and sound dispatcher modules
+        try {
+            remoteModule = manager.getModuleInstance(IRemoteControlModule.class);
+
+        } catch (ModuleNotFoundException e) {
+            e.printStackTrace();
+        }
+        // Load properties from file
+        Properties properties = new Properties();
+        AssetManager assetManager = manager.getApplicationContext().getAssets();
+
+        try {
+            InputStream inputStream = assetManager.open("sound.properties");
+            properties.load(inputStream);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        sampleRate = Integer.parseInt(properties.getProperty("samplerate"));
+        buffersize = Integer.parseInt(properties.getProperty("buffersize"));
+
+        remoteModule.registerCommand("START-AUDIOSTREAM", new ICommandExecutor() {
             @Override
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 startRecording();
             }
         });
 
-        rcmodule.registerCommand("STOP-AUDIOSTREAM", new ICommandExecutor() {
+        remoteModule.registerCommand("STOP-AUDIOSTREAM", new ICommandExecutor() {
             @Override
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 try{
@@ -73,7 +97,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        rcmodule.registerCommand("SET-AUDIOSTREAM-SAMPLERATE", new ICommandExecutor() {
+        remoteModule.registerCommand("SET-AUDIOSTREAM-SAMPLERATE", new ICommandExecutor() {
             @Override
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 if (c.getParameters().containsKey("sampleRate")) {
@@ -89,7 +113,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        rcmodule.registerCommand("AUDIO-SYNC", new ICommandExecutor() {
+        remoteModule.registerCommand("AUDIO-SYNC", new ICommandExecutor() {
             @Override
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 if (c.getParameters().containsKey("id")) {
@@ -98,7 +122,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        server = new UDPServer(BUFFER_SIZE);
+        server = new UDPServer(buffersize);
         server.start();
     }
 
@@ -117,11 +141,12 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
         return null;
     }
 
+    @SuppressLint("MissingPermission")
     protected void startRecording(){
 
-        BUFFER_SIZE = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+        buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
 
-        if (BUFFER_SIZE == AudioRecord.ERROR_BAD_VALUE) {
+        if (buffersize == AudioRecord.ERROR_BAD_VALUE) {
             Log.e(TAG, "Invalid parameter for AudioRecord");
             return;
         }
@@ -131,7 +156,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
                 sampleRate,
                 channelConfig,
                 audioFormat,
-                BUFFER_SIZE
+                buffersize
         );
         isRecording = true;
         audioRecord.startRecording();
@@ -139,7 +164,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
         audioThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                byte[] audioBuffer = new byte[BUFFER_SIZE];
+                byte[] audioBuffer = new byte[buffersize];
                 while (isRecording) {
                     int bytesRead = audioRecord.read(audioBuffer, 0, audioBuffer.length);
                     if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION ||
