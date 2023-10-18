@@ -32,8 +32,6 @@ public class UDPServer extends Thread {
 
     private RoboboManager manager;
 
-    private boolean isServerRunning;
-
     Thread senderThread;
     Thread receiverThread;
     Thread cleanupThread;
@@ -45,16 +43,25 @@ public class UDPServer extends Thread {
     }
 
     public void stopServerRunning(){
-        isServerRunning = false;
-
-        try{
-            senderThread.join();
-            receiverThread.join();
-            cleanupThread.join();
-        } catch (InterruptedException e){
-            manager.logError(tag, e.getMessage(), e);
+        Thread moribund;
+        if(senderThread != null){
+            moribund = senderThread;
+            senderThread = null;
+            moribund.interrupt();
         }
-
+        if(receiverThread != null){
+            moribund = receiverThread;
+            receiverThread = null;
+            moribund.interrupt();
+        }
+        if(cleanupThread != null){
+            moribund = cleanupThread;
+            cleanupThread = null;
+            moribund.interrupt();
+        }
+        connectedClients.clear();
+        lastClientActivity.clear();
+        packetQueue.clear();
     }
 
     @Override
@@ -62,8 +69,6 @@ public class UDPServer extends Thread {
         try {
             manager.log(LogLvl.DEBUG, tag, String.format("Audio stream server listening on %s:%d", getIPAddress(true), PORT));
             socket = new DatagramSocket(PORT);
-
-            isServerRunning = true;
 
             senderThread = new Thread(this::sendDataToClients);
             senderThread.start();
@@ -87,7 +92,7 @@ public class UDPServer extends Thread {
     }
 
     private void sendDataToClients() {
-        while (isServerRunning) {
+        while (true) {
             try {
                 byte[] data = packetQueue.take();
                 for (InetAddress clientAddress : connectedClients.values()) {
@@ -102,7 +107,7 @@ public class UDPServer extends Thread {
 
     private void receiveDataFromClients() {
         byte[] receiveData = new byte[bufferSize];
-        while (isServerRunning) {
+        while (true) {
             try {
                 DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 socket.receive(receivePacket);
@@ -143,7 +148,7 @@ public class UDPServer extends Thread {
     }
 
     private void cleanupInactiveClients() {
-        while (isServerRunning) {
+        while (true) {
             long currentTime = System.currentTimeMillis();
             for (Map.Entry<String, Long> entry : lastClientActivity.entrySet()) {
                 if (currentTime - entry.getValue() > CLIENT_TIMEOUT) {

@@ -103,10 +103,15 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 if (c.getParameters().containsKey("sampleRate")) {
                     try{
-                        stopRecording();
+                        boolean wasRecording = isRecording;
+                        if (wasRecording){
+                            stopRecording();
+                        }
                         int newSampleRate = Integer.parseInt(c.getParameters().get("sampleRate"));
                         setSampleRate(newSampleRate);
-                        startRecording();
+                        if (wasRecording){
+                            startRecording();
+                        }
                     } catch (Exception e){
                         Log.e(TAG, e.getMessage());
                     }
@@ -115,7 +120,7 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        remoteModule.registerCommand("AUDIO-SYNC", new ICommandExecutor() {
+        remoteModule.registerCommand("AUDIOSTREAM-SYNC", new ICommandExecutor() {
             @Override
             public void executeCommand(Command c, IRemoteControlModule rcmodule) {
                 if (c.getParameters().containsKey("id")) {
@@ -124,19 +129,27 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             }
         });
 
-        server = new UDPServer(buffersize, TAG, m);
-        server.start();
+        if (server == null){
+            server = new UDPServer(buffersize, TAG, m);
+            server.start();
+        }
     }
 
     @Override
-    public void shutdown() throws InternalErrorException {
+    public void shutdown() {
         try{
-            server.stopServerRunning();
-            server.join();
+            if (isRecording){
+                stopRecording();
+            }
+            if (server != null){
+                UDPServer moribund = server;
+                server = null;
+                moribund.stopServerRunning();
+                moribund.interrupt();
+            }
         } catch (InterruptedException e){
             m.logError(TAG, e.getMessage(), e);
         }
-
     }
 
     @Override
@@ -151,66 +164,72 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
 
     @SuppressLint("MissingPermission")
     protected void startRecording(){
-        m.log(LogLvl.DEBUG, TAG, "Started recording mic audio for streaming");
-        buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+        if(!isRecording && audioThread == null){
+            m.log(LogLvl.DEBUG, TAG, "Started recording mic audio for streaming");
+            buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
 
-        if (buffersize == AudioRecord.ERROR_BAD_VALUE) {
-            Log.e(TAG, "Invalid parameter for AudioRecord");
-            return;
-        }
+            if (buffersize == AudioRecord.ERROR_BAD_VALUE) {
+                Log.e(TAG, "Invalid parameter for AudioRecord");
+                return;
+            }
 
-        audioRecord = new AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                buffersize
-        );
-        isRecording = true;
-        audioRecord.startRecording();
+            audioRecord = new AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    channelConfig,
+                    audioFormat,
+                    buffersize
+            );
+            isRecording = true;
+            audioRecord.startRecording();
 
-        audioThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                byte[] audioBuffer = new byte[buffersize];
-                while (isRecording) {
-                    int bytesRead = audioRecord.read(audioBuffer, 0, audioBuffer.length);
-                    if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION ||
-                            bytesRead == AudioRecord.ERROR_BAD_VALUE) {
-                        Log.e(TAG, "Error reading audio data.");
-                    } else {
-                        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES*2);
-                        buffer.putLong(0, System.currentTimeMillis());
-                        buffer.putLong(8,sync_id);
-                        sync_id = -1;
+            audioThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    byte[] audioBuffer = new byte[buffersize];
+                    while (isRecording) {
+                        int bytesRead = audioRecord.read(audioBuffer, 0, audioBuffer.length);
+                        if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION ||
+                                bytesRead == AudioRecord.ERROR_BAD_VALUE) {
+                            Log.e(TAG, "Error reading audio data.");
+                        } else {
+                            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES*2);
+                            buffer.putLong(0, System.currentTimeMillis());
+                            buffer.putLong(8,sync_id);
+                            sync_id = -1;
 
-                        byte[] metadataBytes = buffer.array();
+                            byte[] metadataBytes = buffer.array();
 
-                        ByteArrayOutputStream output = new ByteArrayOutputStream();
+                            ByteArrayOutputStream output = new ByteArrayOutputStream();
 
-                        try {
-                            output.write(audioBuffer);
-                            output.write(metadataBytes);
+                            try {
+                                output.write(audioBuffer);
+                                output.write(metadataBytes);
 
-                        } catch (IOException e) {
-                            m.logError(TAG, e.getMessage(), e);
+                            } catch (IOException e) {
+                                m.logError(TAG, e.getMessage(), e);
+                            }
+
+                            byte[] out = output.toByteArray();
+                            server.addToQueue(out);
                         }
-
-                        byte[] out = output.toByteArray();
-                        server.addToQueue(out);
                     }
                 }
-            }
-        });
+            });
 
-        audioThread.start();
+            audioThread.start();
+        }
     }
 
     protected void stopRecording() throws InterruptedException {
-        m.log(LogLvl.DEBUG, TAG,"Stopped recording mic audio for streaming");
-        isRecording = false;
-        audioRecord.stop();
-        audioThread.join();
+        if(isRecording && audioThread != null){
+            m.log(LogLvl.DEBUG, TAG,"Stopped recording mic audio for streaming");
+            isRecording = false;
+            audioRecord.stop();
+            Thread moribund = audioThread;
+            audioThread = null;
+            moribund.interrupt();
+        }
     }
 
     @Override
