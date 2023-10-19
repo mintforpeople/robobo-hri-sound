@@ -24,6 +24,11 @@ android {
             withJavadocJar()
         }
     }
+    sourceSets {
+        main {
+            assets.srcDirs += "$buildDir/generated/assets"
+        }
+    }
 }
 
 dependencies {
@@ -32,8 +37,25 @@ dependencies {
     api 'com.mytechia:robobo-framework:1.3.4'
     api 'com.mytechia:robobo-remote-control:1.0.2'
     api files('libs/TarsosDSP-Android-latest.jar')
+    implementation group: 'com.alphacephei', name: 'vosk-android', version: '0.3.47'
 }
 
+tasks.register('genUUID') {
+    def uuid_en = UUID.randomUUID().toString()
+    def odir_en = file("$buildDir/generated/assets/model-en-us")
+    def ofile_en = file("$odir_en/uuid")
+    def uuid_es = UUID.randomUUID().toString()
+    def odir_es = file("$buildDir/generated/assets/model-es-es")
+    def ofile_es = file("$odir_es/uuid")
+    doLast {
+        mkdir odir_en
+        mkdir odir_es
+        ofile_en.text = uuid_en
+        ofile_es.text = uuid_es
+    }
+}
+
+preBuild.dependsOn(genUUID)
 
 /*
 New local publish module
