@@ -13,6 +13,7 @@ import com.mytechia.robobo.framework.hri.sound.noiseMetering.INoiseMeterModule;
 import com.mytechia.robobo.framework.hri.sound.noteDetection.INoteDetectionModule;
 import com.mytechia.robobo.framework.hri.sound.pitchDetection.IPitchDetectionModule;
 import com.mytechia.robobo.framework.hri.sound.soundDispatcherModule.ISoundDispatcherModule;
+import com.mytechia.robobo.framework.hri.sound.soundStream.ISoundStreamModule;
 import com.mytechia.robobo.framework.service.RoboboServiceHelper;
 
 public class TestActivity extends AppCompatActivity {
@@ -22,6 +23,8 @@ public class TestActivity extends AppCompatActivity {
     private IPitchDetectionModule pitchDetectionModule;
     private INoteDetectionModule noteDetectionModule;
     private INoiseMeterModule noiseMeterModule;
+
+    private ISoundStreamModule soundStreamModule;
     private RoboboManager manager;
 
     @Override
@@ -51,14 +54,13 @@ public class TestActivity extends AppCompatActivity {
     public void startapp(){
         try {
 
-                dispatcherModule = manager.getModuleInstance(ISoundDispatcherModule.class);
-                pitchDetectionModule = manager.getModuleInstance(IPitchDetectionModule.class);
-//                noteDetectionModule = manager.getModuleInstance(INoteDetectionModule.class);
+             dispatcherModule = manager.getModuleInstance(ISoundDispatcherModule.class);
+             pitchDetectionModule = manager.getModuleInstance(IPitchDetectionModule.class);
+//          noteDetectionModule = manager.getModuleInstance(INoteDetectionModule.class);
             noiseMeterModule = manager.getModuleInstance(INoiseMeterModule.class);
+            soundStreamModule = manager.getModuleInstance(ISoundStreamModule.class);
                 dispatcherModule.runDispatcher();
             Log.d("TEST","TEST");
-
-
 
         } catch (ModuleNotFoundException e) {
             e.printStackTrace();

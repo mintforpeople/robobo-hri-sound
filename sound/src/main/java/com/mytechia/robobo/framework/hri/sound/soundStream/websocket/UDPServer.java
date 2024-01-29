@@ -76,8 +76,8 @@ public class UDPServer extends Thread {
             receiverThread = new Thread(this::receiveDataFromClients);
             receiverThread.start();
 
-            cleanupThread = new Thread(this::cleanupInactiveClients);
-            cleanupThread.start();
+            //cleanupThread = new Thread(this::cleanupInactiveClients);
+            //cleanupThread.start();
         } catch (Exception e) {
             manager.logError(tag, e.getMessage(), e);
         }

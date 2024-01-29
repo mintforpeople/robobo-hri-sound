@@ -20,21 +20,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.Properties;
 
 public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     private static final String TAG = "AndMicSoundStreamModule";
     static final int QUEUE_LENGTH = 60;
-
-    private static final int LOW_SAMPLE_RATE = 11025; // Frecuencia de muestreo en Hz
     private static final int DEFAULT_SAMPLE_RATE = 44100; // Frecuencia de muestreo en Hz
-    private static final int HIGH_SAMPLE_RATE = 48000; // Frecuencia de muestreo en Hz
-    private static final int HIGHEST_SAMPLE_RATE = 96000; // Frecuencia de muestreo en Hz
-    private static final int EXTREME_SAMPLE_RATE = 192000; // Frecuencia de muestreo en Hz
-
     private static final int DEFAULT_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
     private static final int DEFAULT_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
-
 
     public boolean isRecording;
     public AudioRecord audioRecord;
@@ -66,19 +58,6 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
         } catch (ModuleNotFoundException e) {
             e.printStackTrace();
         }
-        // Load properties from file
-        Properties properties = new Properties();
-        AssetManager assetManager = manager.getApplicationContext().getAssets();
-
-        try {
-            InputStream inputStream = assetManager.open("sound.properties");
-            properties.load(inputStream);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        sampleRate = Integer.parseInt(properties.getProperty("samplerate"));
-        buffersize = Integer.parseInt(properties.getProperty("buffersize"));
 
         remoteModule.registerCommand("START-AUDIOSTREAM", new ICommandExecutor() {
             @Override
@@ -94,28 +73,6 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
                     stopRecording();
                 } catch (InterruptedException e){
                     Log.e(TAG, e.toString());
-                }
-            }
-        });
-
-        remoteModule.registerCommand("SET-AUDIOSTREAM-SAMPLERATE", new ICommandExecutor() {
-            @Override
-            public void executeCommand(Command c, IRemoteControlModule rcmodule) {
-                if (c.getParameters().containsKey("sampleRate")) {
-                    try{
-                        boolean wasRecording = isRecording;
-                        if (wasRecording){
-                            stopRecording();
-                        }
-                        int newSampleRate = Integer.parseInt(c.getParameters().get("sampleRate"));
-                        setSampleRate(newSampleRate);
-                        if (wasRecording){
-                            startRecording();
-                        }
-                    } catch (Exception e){
-                        Log.e(TAG, e.getMessage());
-                    }
-
                 }
             }
         });
@@ -163,7 +120,8 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
     }
 
     @SuppressLint("MissingPermission")
-    protected void startRecording(){
+    @Override
+    public void startRecording(){
         if(!isRecording && audioThread == null){
             m.log(LogLvl.DEBUG, TAG, "Started recording mic audio for streaming");
             buffersize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
@@ -203,9 +161,8 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
                             ByteArrayOutputStream output = new ByteArrayOutputStream();
 
                             try {
-                                output.write(audioBuffer);
                                 output.write(metadataBytes);
-
+                                output.write(audioBuffer);
                             } catch (IOException e) {
                                 m.logError(TAG, e.getMessage(), e);
                             }
@@ -221,7 +178,8 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
         }
     }
 
-    protected void stopRecording() throws InterruptedException {
+    @Override
+    public void stopRecording() throws InterruptedException {
         if(isRecording && audioThread != null){
             m.log(LogLvl.DEBUG, TAG,"Stopped recording mic audio for streaming");
             isRecording = false;
@@ -229,32 +187,6 @@ public class AndroidMicrophoneSoundStreamModule extends ASoundStreamModule  {
             Thread moribund = audioThread;
             audioThread = null;
             moribund.interrupt();
-        }
-    }
-
-    @Override
-    public void setSampleRate(int sampleRate){
-        m.log(LogLvl.DEBUG, TAG,String.format("Changing sampleRate from %d to %d", this.sampleRate, sampleRate));
-        if (!isRecording){
-            switch (sampleRate){
-                case LOW_SAMPLE_RATE:
-                    this.sampleRate = LOW_SAMPLE_RATE;
-                    break;
-                case DEFAULT_SAMPLE_RATE:
-                    this.sampleRate = DEFAULT_SAMPLE_RATE;
-                    break;
-                case HIGH_SAMPLE_RATE:
-                    this.sampleRate = HIGH_SAMPLE_RATE;
-                    break;
-                case HIGHEST_SAMPLE_RATE:
-                    this.sampleRate = HIGHEST_SAMPLE_RATE;
-                    break;
-                case EXTREME_SAMPLE_RATE:
-                    this.sampleRate = EXTREME_SAMPLE_RATE;
-                    break;
-                default:
-                    break;
-            }
         }
     }
 
